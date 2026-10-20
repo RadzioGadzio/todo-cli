@@ -10,7 +10,7 @@ pub enum Action {
         #[arg(short, long, required = false,  help = "Todo description", value_name = "TEXT")]
         description: Option<String>,
         #[arg(short, long, required = false, help = "Parent todo item", value_name = "ID")]
-        parent: Option<u32>,
+        parent_id: Option<u32>,
     },
     EDIT {
         #[arg(required = true)]
@@ -20,20 +20,27 @@ pub enum Action {
         #[arg(short, long)]
         description: Option<String>,
         #[arg(short, long)]
-        parent: Option<u32>,
+        parent_id: Option<u32>,
     },
     REMOVE {
-        #[arg(required = true, help = "Todo ids to remove")]
-        id: Vec<String>
+        #[arg(help = "Todo ids to remove")]
+        ids: Vec<u32>,
+
+        #[arg(short = 'd', long, help = "Remove only done", default_value = "true")]
+        only_done: bool,
+
     },
     DONE {
         #[arg(required = true, help = "Todo ids to mark done")]
-        id: Vec<String>,
+        ids: Vec<u32>,
+
+        #[arg(short, long, help = "Mark all children as done", default_value = "false")]
+        recursive: bool,
+
+        #[arg(short, long, help = "Mark item as not checked", default_value = "false")]
+        inverted: bool
     },
-    LIST {
-        #[arg(long, short, help = "Show description")]
-        description: bool,
-    },
+    LIST,
     RESET,
     BACKUP
 }

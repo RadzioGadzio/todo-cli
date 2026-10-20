@@ -15,8 +15,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            db_path: Path::new("./.todos.csv").to_path_buf(),
-            backups_dir: Path::new("./backups").to_path_buf(),
+            db_path: Path::new("todos.csv").to_path_buf(),
+            backups_dir: Path::new("backups").to_path_buf(),
         }
     }
 }
