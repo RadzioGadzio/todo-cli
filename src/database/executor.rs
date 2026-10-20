@@ -1,5 +1,7 @@
 use crate::args::Action;
 use crate::database::{Item};
+use crate::database::item::print_pretty;
+
 pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, String> {
     match action {
         Action::LIST => {
@@ -28,31 +30,11 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             return Ok(true);
         }
         Action::DONE { ids , recursive, inverted} => {
-            let found = items.iter().any(|item| ids.contains(&item.id()));
-            if !found {
-                return Err(
-                    format!(
-                        "Items with id not found: {:?}",
-                        ids.iter().map(|item| item.to_string()).collect::<Vec<String>>()
-                    )
-                );
+            if ids.is_empty() {
+                return Err("Empty IDs not allowed".to_string());
             }
-
-            let mut targets: Vec<u32> = Vec::new();
-            let mut children: Vec<(u32, usize)> = Vec::new();
-            let marked_items = items.iter().filter(|item| ids.contains(&item.id())).collect::<Vec<&Item>>();
-            for item in marked_items {
-                children.clear();
-                item.collect_children(items, &mut children);
-
-                if ids.contains(&item.id()) {
-                    targets.push(item.id());
-                }
-                if !!recursive && !children.is_empty() {
-                    targets.extend(children.iter().map(|(id, _)| id));
-                }
-
-            }
+            check_ids(items, ids)?;
+            let targets: Vec<u32> = get_selected_ids(items, ids, *recursive);
 
             for item in items.iter_mut() {
                 if !targets.contains(&item.id()) { continue;}
@@ -69,22 +51,4 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
     Ok(false)
 }
 
-fn print_pretty(items: &[Item]) {
-    let root_items = items.iter().filter(|item| item.parent.is_none()).collect::<Vec<&Item>>();
-    let mut targets: Vec<(u32, usize)> = Vec::new();
-    let mut children: Vec<(u32, usize)> = Vec::new();
 
-    for item in root_items {
-        children.clear();
-        item.collect_children(items, &mut children);
-        if children.is_empty() { continue; }
-        targets.extend(children.iter());
-    }
-
-    for (id, depth) in targets {
-        let item = items.iter().find(|item| item.id() == id);
-        if let Some(item) = item {
-            item.print_pretty(depth * 4);
-        }
-    }
-}
