@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Debug, Subcommand)]
 pub enum Action {
-    ADD {
+    Add {
         #[arg(required = true, help = "Todo title")]
         title: String,
         #[arg(short, long, required = false,  help = "Todo description", value_name = "TEXT")]
@@ -12,7 +12,7 @@ pub enum Action {
         #[arg(short, long, required = false, help = "Parent todo item", value_name = "ID")]
         parent_id: Option<u32>,
     },
-    EDIT {
+    Edit {
         #[arg(required = true)]
         id: u32,
         #[arg(short, long)]
@@ -22,7 +22,7 @@ pub enum Action {
         #[arg(short, long)]
         parent_id: Option<u32>,
     },
-    REMOVE {
+    Remove {
         #[arg(help = "Todo ids to remove. If omitted removes all done todos")]
         ids: Vec<u32>,
 
@@ -33,7 +33,7 @@ pub enum Action {
         all: bool,
 
     },
-    DONE {
+    Done {
         #[arg(required = true, help = "Todo ids to mark done")]
         ids: Vec<u32>,
 
@@ -43,17 +43,17 @@ pub enum Action {
         #[arg(short, long, help = "Mark item as not checked", default_value = "false")]
         inverted: bool
     },
-    LIST,
-    RESET,
-    BACKUP {
+    List,
+    Reset,
+    Backup {
         #[arg(short, long, help = "Index of backup to restore")]
         index: Option<u32>,
         #[arg(short, long, help = "Backup path to restore")]
         path: Option<PathBuf>,
-        
+
         #[arg(short, long, help = "Create new backup")]
         create: bool,
-        
+
         #[arg(short, long, help = "New backup name")]
         name: Option<String>,
     }

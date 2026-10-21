@@ -27,7 +27,7 @@ impl Default for Config {
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self, Box<dyn Error>> {
-        match fs::read_to_string(&path) {
+        match fs::read_to_string(path) {
             Ok(content) if content.trim().is_empty() => Ok(Config::default()),
             Ok(content) => Ok(serde_yaml_ng::from_str(&content)?),
             Err(e) if e.kind() == ErrorKind::NotFound => {

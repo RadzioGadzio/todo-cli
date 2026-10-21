@@ -26,7 +26,7 @@ impl Database {
         }
     }
     pub fn run(&self) -> Result<(), String> {
-        if let Action::BACKUP { .. } = &self.args.action {
+        if let Action::Backup { .. } = &self.args.action {
             return self.backup_action(&self.args.action);
         }
         let mut items = self.read(None)?;
@@ -41,32 +41,29 @@ impl Database {
     }
 
     fn backup_action(&self, action: &Action) -> Result<(), String> {
-        match action {
-            Action::BACKUP { index, path, name, create } => {
-                if *create {
-                    let name =  match name {
-                        Some(name) => name.as_str(),
-                        None => "manual"
-                    };
-                    self.backup(Some(&name))?;
-                    println!("Backup '{}' created", name);
-                    return Ok(());
-                }
-
-                let target: Option<PathBuf> = match (path, index) {
-                    (Some(p), _) => Some(p.clone()),
-                    (None, Some(i)) => Some(self.get_backup_path(*i)?),
-                    (None, None) => None
+        if let Action::Backup { index, path, name, create } = action {
+            if *create {
+                let name =  match name {
+                    Some(name) => name.as_str(),
+                    None => "manual"
                 };
-
-                match target {
-                    // Restore backup from path
-                    Some(p) => self.restore(&p)?,
-                    // List backups
-                    None => self.print_backups()?
-                }
+                self.backup(Some(name))?;
+                println!("Backup '{}' created", name);
+                return Ok(());
             }
-            _ => {}
+
+            let target: Option<PathBuf> = match (path, index) {
+                (Some(p), _) => Some(p.clone()),
+                (None, Some(i)) => Some(self.get_backup_path(*i)?),
+                (None, None) => None
+            };
+
+            match target {
+                // Restore backup from path
+                Some(p) => self.restore(&p)?,
+                // List backups
+                None => self.print_backups()?
+            }
         }
 
         Ok(())
@@ -116,7 +113,7 @@ impl Database {
                 .delimiter(b';')
                 .has_headers(true)
                 .quote_style(csv::QuoteStyle::Always)
-                .from_path(&tmp)?;
+                .from_path(tmp)?;
             for item in items {
                 writer.serialize(item)?;
             }
@@ -130,10 +127,9 @@ impl Database {
         };
 
 
-        if let Some(ext) = path.extension() {
-            if ext.is_empty() || ext != "csv" {
-                return Err(format!("Invalid database extension: {}. Should be '.csv'", path.display()));
-            }
+        if let Some(ext) = path.extension() &&
+            (ext.is_empty() || ext != "csv") {
+            return Err(format!("Invalid database extension: {}. Should be '.csv'", path.display()));
         }
 
         if let Some(parent) = path.parent() {
@@ -142,7 +138,7 @@ impl Database {
 
         let tmp = &path.with_extension("csv.tmp");
 
-        _write(items, &tmp).map_err(|err| err.to_string())?;
+        _write(items, tmp).map_err(|err| err.to_string())?;
         
         fs::rename(tmp, path).map_err(|err| err.to_string())?;
         
@@ -150,6 +146,11 @@ impl Database {
     }
 
     pub fn backup(&self, name: Option<&str>) -> Result<(), String> {
+        if !&self.config.db_path.exists() {
+            eprintln!("Couldn't find database: {}", self.config.db_path.display());
+
+            return Ok(());
+        }
         let now: DateTime<Utc> = SystemTime::now().into();
         let backup_dir = &self.config.backups_dir;
 
@@ -159,7 +160,7 @@ impl Database {
 
         let mut file_name = now.format("%F_%H-%M-%S").to_string();
         if let Some(name) = name {
-            file_name.push_str("_");
+            file_name.push("_".chars().next_back().unwrap());
             file_name.push_str(name);
         }
         let path = backup_dir.join(PathBuf::from(format!("{}.csv", file_name)));
@@ -230,7 +231,7 @@ impl Database {
         }
 
         // Newest first
-        backups.sort_by(|a, b| b.1.cmp(&a.1));
+        backups.sort_by_key(|a| std::cmp::Reverse(a.1));
 
         Ok(backups)
     }
@@ -243,15 +244,13 @@ impl Database {
 
         let now = SystemTime::now();
         for (index, (path, modified)) in backups.iter().enumerate() {
-            let age = now.duration_since(*modified).unwrap_or_else(|_| Duration::ZERO);
+            let age = now.duration_since(*modified).unwrap_or(Duration::ZERO);
 
             let too_many = max_count > 0 && index >= max_count;
             let too_old = max_days > 0 && age > max_age;
 
-            if too_many || too_old {
-                if let Err(e) = fs::remove_file(path) {
-                    eprintln!("Cannot delete backup {}: {}", path.display(), e);
-                }
+            if (too_many || too_old) && let Err(e) = fs::remove_file(path) {
+                eprintln!("Cannot delete backup {}: {}", path.display(), e);
             }
         }
 
@@ -261,7 +260,7 @@ impl Database {
         let backups: Vec<(PathBuf, SystemTime)> = self.collect_backups()?;
 
         for (index, (path, time)) in backups.iter().enumerate() {
-            let time: DateTime<Utc> = time.clone().into();
+            let time: DateTime<Utc> = (*time).into();
             println!("{} | {} [{}]",
                      index,
                      path.display(),

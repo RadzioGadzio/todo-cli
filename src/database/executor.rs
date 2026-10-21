@@ -4,10 +4,10 @@ use crate::database::item::{check_parent, print_pretty, check_ids, get_selected_
 
 pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, String> {
     match action {
-        Action::LIST => {
+        Action::List => {
             print_pretty(items);
         }
-        Action::ADD { title, parent_id, description } => {
+        Action::Add { title, parent_id, description } => {
             if title.trim().is_empty() {
                 return Err("Title cannot be empty".to_string());
             }
@@ -20,23 +20,23 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             }
 
             if let Some(parent_id) = parent_id {
-                check_parent(items, parent_id.clone())?;
+                check_parent(items, *parent_id)?;
             }
 
             items.push(Item::new(
                 max_id + 1,
                 title.to_string(),
                 description.clone(),
-                parent_id.clone()
+                *parent_id
             ));
-            execute_action(items, &Action::LIST)?;
+            execute_action(items, &Action::List)?;
 
             return Ok(true);
         },
-        Action::REMOVE { ids, recursive, all } => {
+        Action::Remove { ids, recursive, all } => {
             if *all {
                 items.clear();
-                execute_action(items, &Action::LIST)?;
+                execute_action(items, &Action::List)?;
                 return Ok(true);
             }
             let mut ids = ids.clone();
@@ -45,18 +45,18 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             }
 
             if ids.is_empty() {
-                execute_action(items, &Action::LIST)?;
+                execute_action(items, &Action::List)?;
                 return Ok(false);
             }
             check_ids(items, &ids)?;
             let targets: Vec<u32> = get_selected_ids(items, &ids, *recursive);
 
             items.retain(|item| !targets.contains(&item.id()));
-            execute_action(items, &Action::LIST)?;
+            execute_action(items, &Action::List)?;
 
             return Ok(true);
         },
-        Action::DONE { ids , recursive, inverted} => {
+        Action::Done { ids , recursive, inverted} => {
             if ids.is_empty() {
                 return Err("Empty IDs not allowed".to_string());
             }
@@ -68,23 +68,23 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
                 item.done = !inverted;
             }
 
-            execute_action(items, &Action::LIST)?;
+            execute_action(items, &Action::List)?;
 
             return Ok(true);
         },
-        Action::RESET => {
+        Action::Reset => {
             for item in items.iter_mut() {
                 item.done = false;
             }
-            execute_action(items, &Action::LIST)?;
+            execute_action(items, &Action::List)?;
             return Ok(true);
         }
-        Action::EDIT { id, title, description, parent_id} => {
-            let mut parent_id: Option<u32> = parent_id.clone();
+        Action::Edit { id, title, description, parent_id} => {
+            let mut parent_id: Option<u32> = *parent_id;
 
             if let Some(id) = parent_id {
-                check_parent(items, id.clone())?;
-                parent_id = Some(id.clone());
+                check_parent(items, id)?;
+                parent_id = Some(id);
             }
 
             let item = match items.iter_mut().find(|item| &item.id() == id) {
@@ -96,7 +96,7 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             if let Some(description) = description && !description.is_empty() { item.description = Some(description.to_string()); }
             if let Some(parent_id) = parent_id { item.parent = Some(parent_id); }
 
-            execute_action(items, &Action::LIST)?;
+            execute_action(items, &Action::List)?;
 
             return Ok(true);
         }

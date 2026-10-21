@@ -37,7 +37,7 @@ impl Item {
             line.push_str(&format!(" - {}", desc));
         }
 
-        print!("{}\n", line);
+        println!("{}", line);
     }
 
     pub fn collect_children(&self, items: &[Item], out: &mut Vec<(u32, usize)>) {

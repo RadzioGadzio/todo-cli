@@ -1,4 +1,4 @@
-name: Rust
+name: Rust Build
 
 on:
   push:
@@ -19,21 +19,33 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.set_tag.outputs.name }}
+      name: ${{ github.repository.name }}
+      tag: ${{ steps.tag.outputs.tag }}
+      os: ${{ steps.os.outputs.os }}
+      arch: ${{ steps.arch.outputs.arch }}
     steps:
-      - id: set_tag
-        env: 
+      - id: tag
+        env:
           INPUT_TAG: ${{ github.event.inputs.manual_tag }}
           REF_NAME: ${{ github.ref_name }}
-        run: echo "tag=${INPUT_TAG;-$REF_NAME}" >> $GITHUB_OUTPUT
+        run: echo "tag=${INPUT_TAG:-$REF_NAME}" >> $GITHUB_OUTPUT
+      - id: os
+        run: echo "os=["ubuntu-latest", "windows-latest", "macos-latest"]" >> $GITHUB_OUTPUT
+      - id: arch
+        run: echo "arch=["x64", "arm64"]" >> $GITHUB_OUTPUT
   test:
-    name: Test Suite (${{ matrix.os }})
+    needs: config
+    name: Test Suite (${{ matrix.os }}-${{ matrix.arch }}) | Rust ${{ matrix.rust }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2025]
+        os: ${{ fromJSON(needs.config.outputs.os) }}
+        arch: ${{ fromJSON(needs.config.outputs.arch) }}
         rust: [1.99.0]
+        exclude:
+          - os: macos-latest
+            arch: x64
     steps:
       - uses: actions/checkout@v4
       
@@ -46,7 +58,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "rust-${{ matrix.os }}-${{ matrix.rust }}"
+          shared-key: "rust-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.rust }}"
       
       - name: Run Tests
         run: cargo test --all-features --workspace
@@ -60,15 +72,18 @@ jobs:
       - config
     strategy:
       matrix:
+        os: ${{ fromJSON(needs.config.outputs.os) }}
+        arch: ${{ fromJSON(needs.config.outputs.arch) }}
         include:
           - os: ubuntu-latest
-            suffix: linux-x64
-          - os: ubuntu-latest-arm
-            suffix: linux-arm64
+            suffix: linux
           - os: windows-latest
-            suffix: windows-x64
+            suffix: windows
           - os: macos-latest
-            suffix: macos-arm64
+            suffix: macos
+        exclude:
+          - os: macos-latest
+            arch: x64
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
@@ -86,6 +101,6 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: todo-cli-${{ matrix.suffix }}
-        path: target/release/${{ needs.config.outputs.tag }}_${{ matrix.suffix }}
+        name: ${{ needs.config.outputs.name }}-${{ matrix.suffix }}-${{ matrix.arch }}
+        path: target/release/${{ needs.config.outputs.tag }}_${{ matrix.suffix }}-${{ matrix.arch }}
         retention-days: 7
