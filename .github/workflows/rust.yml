@@ -13,84 +13,54 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
+  RUST_CLIPPY_ARGS: "-D warnings"
+  RUST_VERSION: "1.99.0"
+  BIN_NAME: "todo-cli"
 
 jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      name: ${{ github.repository.name }}
-      tag: ${{ steps.tag.outputs.tag }}
-      os: ${{ steps.os.outputs.os }}
-      arch: ${{ steps.arch.outputs.arch }}
-    steps:
-      - id: tag
-        env:
-          INPUT_TAG: ${{ github.event.inputs.manual_tag }}
-          REF_NAME: ${{ github.ref_name }}
-        run: echo "tag=${INPUT_TAG:-$REF_NAME}" >> $GITHUB_OUTPUT
-      - id: os
-        run: echo "os=["ubuntu-latest", "windows-latest", "macos-latest"]" >> $GITHUB_OUTPUT
-      - id: arch
-        run: echo "arch=["x64", "arm64"]" >> $GITHUB_OUTPUT
   test:
-    needs: config
-    name: Test Suite (${{ matrix.os }}-${{ matrix.arch }}) | Rust ${{ matrix.rust }}
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.config.outputs.os) }}
-        arch: ${{ fromJSON(needs.config.outputs.arch) }}
-        rust: [1.99.0]
-        exclude:
-          - os: macos-latest
-            arch: x64
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
     steps:
       - uses: actions/checkout@v4
       
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: ${{ env.RUST_VERSION }}
           components: clippy, rustfmt
       
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "rust-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.rust }}"
+          shared-key: "rust-${{ matrix.os }}-${{ env.RUST_VERSION }}"
       
       - name: Run Tests
         run: cargo test --all-features --workspace
       
       - name: Clippy Lints
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- ${{ env.RUST_CLIPPY_ARGS }}
   build:
-    name: Production Binary
-    needs: 
-      - test
-      - config
+    name: Binary (${{ matrix.suffix }})
+    needs: test
     strategy:
+      fail-fast: false
       matrix:
-        os: ${{ fromJSON(needs.config.outputs.os) }}
-        arch: ${{ fromJSON(needs.config.outputs.arch) }}
         include:
-          - os: ubuntu-latest
-            suffix: linux
-          - os: windows-latest
-            suffix: windows
-          - os: macos-latest
-            suffix: macos
-        exclude:
-          - os: macos-latest
-            arch: x64
+          - { os: ubuntu-latest,  suffix: linux,   ext: "" }
+          - { os: windows-latest, suffix: windows, ext: ".exe" }
+          - { os: macos-latest,   suffix: macos,   ext: "" }
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v4
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: 1.85.0
+        toolchain: ${{ env.RUST_VERSION }}
     
     - name: Rust Cache
       uses: Swatinem/rust-cache@v2
@@ -101,6 +71,7 @@ jobs:
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ needs.config.outputs.name }}-${{ matrix.suffix }}-${{ matrix.arch }}
-        path: target/release/${{ needs.config.outputs.tag }}_${{ matrix.suffix }}-${{ matrix.arch }}
+        name: ${{ env.BIN_NAME }}-${{ github.event.inputs.manual_tag || github.ref_name }}-${{ matrix.suffix }}
+        path: target/release/${{ env.BIN_NAME }}${{ matrix.ext }}
+        if-no-files-found: 'error'
         retention-days: 7
