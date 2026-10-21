@@ -52,9 +52,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  suffix: linux,   ext: "",     archive: tar.gz  }
-          - { os: windows-latest, suffix: windows, ext: ".exe", archive: zip  }
-          - { os: macos-latest,   suffix: macos,   ext: "",     archive: tar.gz  }
+          - { os: ubuntu-latest,  suffix: linux,   ext: ""  }
+          - { os: windows-latest, suffix: windows, ext: ".exe" }
+          - { os: macos-latest,   suffix: macos,   ext: "" }
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v7
@@ -69,25 +69,21 @@ jobs:
     - name: Build Release Binary
       run: cargo build --release --locked
 
-    - name: Package
+    - name: Name Binary
+      id: bin
       shell: bash
-      env:
-        ASSET: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}
       run: |
-        mkdir "$ASSET"
-        cp "target/release/${BIN_NAME}${{ matrix.ext }}" "$ASSET/"
-        if [ "${{ matrix.archive }}" = "zip" ]; then
-          7z a "$ASSET.zip" "$ASSET"
-        else
-          tar czf "$ASSET.tar.gz" "$ASSET"
-        fi
+        OUT="${BIN_NAME}-${{ matrix.suffix }}${{ matrix.ext }}"
+        cp "target/release/${BIN_NAME}${{ matrix.ext }}" "$OUT"
+        echo "file=$OUT" >> "$GITHUB_OUTPUT"
+      
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v7
       with:
-        name: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}
-        path: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}.${{ matrix.archive }}
+        path: ${{ steps.bin.outputs.file }}
         if-no-files-found: 'error'
-        compression-level: 0
+        archive: false
         retention-days: 7
   release:
     name: Release

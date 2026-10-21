@@ -65,7 +65,7 @@ pub struct Args {
     #[command(subcommand)]
     pub action: Action,
 
-    #[arg(short, long, default_value = "./todos.yaml")]
+    #[arg(short, long, default_value = "./config.yaml")]
     pub config: PathBuf,
 }
 
