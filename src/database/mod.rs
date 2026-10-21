@@ -26,7 +26,11 @@ impl Database {
         }
     }
     pub fn run(&self) -> Result<(), String> {
-        let mut items = self.read()?;
+        let items_result = self.read(None);
+        if let Err(e) = items_result {
+            return Err(e);
+        }
+        let mut items = items_result?;
 
         if let Action::BACKUP { .. } = &self.args.action {
             if self.backup_action(&self.args.action, &mut items)? {
@@ -37,7 +41,9 @@ impl Database {
         }
 
         if execute_action(&mut items, &self.args.action)? {
-            self.write_backup(None)?;
+            if let Err(e) = self.backup(None) {
+                return Err(e);
+            }
             self.write(&items, None)?;
         }
 
@@ -55,9 +61,9 @@ impl Database {
                     // Restore backup from path
                     todo!()
                 }
+                // List backups
                 else {
-                    // List backups
-                    todo!()
+                    self.print_backups()?;
                 }
             }
             _ => {}
@@ -66,14 +72,18 @@ impl Database {
         Ok(false)
     }
 
-    fn read(&self) -> Result<Vec<Item>, String> {
-        if !self.config.db_path.exists() {
+    fn read(&self, path: Option<&PathBuf>) -> Result<Vec<Item>, String> {
+        let path = match path {
+            Some(path) => path,
+            None => &self.config.db_path
+        };
+        if !path.exists() {
             return Ok(Vec::new());
         }
 
         let opened = csv::ReaderBuilder::new()
             .delimiter(b';')
-            .from_path(&self.config.db_path);
+            .from_path(path);
 
         let mut reader = match opened {
             Ok(r) => r,
@@ -100,7 +110,6 @@ impl Database {
                 Err(e) => { return Err(format!("Cannot read database: {}", e)) }
         })
     }
-
     fn write(&self, items: &Vec<Item>, path: Option<&PathBuf>) -> Result<(), String> {
         fn _write(items: &Vec<Item>, tmp: &PathBuf) -> Result<(), io::Error> {
             let mut writer = csv::WriterBuilder::new()
@@ -139,7 +148,7 @@ impl Database {
         
         Ok(())
     }
-    fn write_backup(&self, name: Option<&str>) -> Result<(), String> {
+    fn backup(&self, name: Option<&str>) -> Result<(), String> {
         let now: DateTime<Utc> = SystemTime::now().into();
         let backup_dir = &self.config.backups_dir;
 
@@ -147,7 +156,7 @@ impl Database {
             fs::create_dir_all(backup_dir).map_err(|err| err.to_string())?;
         }
 
-        let items = self.read()?;
+        let items = self.read(None)?;
         let mut file_name = now.format("%F_%H-%M-%S").to_string();
         if let Some(name) = name {
             file_name.push_str("_");
@@ -163,7 +172,8 @@ impl Database {
     }
 
     /** Collect (path, modified time) for every backup file. */
-    pub fn collect_backups(&self, backups: &mut Vec<(PathBuf, SystemTime)>) -> Result<(), String> {
+    pub fn collect_backups(&self) -> Result<Vec<(PathBuf, SystemTime)>, String> {
+        let mut backups: Vec<(PathBuf, SystemTime)> = Vec::new();
         let entries = match fs::read_dir(&self.config.backups_dir) {
             Ok(entries) => entries,
             Err(e) => return Err(format!("Cannot read backups directory: {}", e)),
@@ -200,15 +210,14 @@ impl Database {
         // Newest first
         backups.sort_by(|a, b| b.1.cmp(&a.1));
 
-        Ok(())
+        Ok(backups)
     }
     pub fn prune_backups(&self) -> Result<(), String> {
         let max_count = self.config.max_backups;
         let max_days = self.config.max_backup_age_days;
         let max_age = Duration::from_secs(max_days * 24 * 60 * 60);
 
-        let mut backups: Vec<(PathBuf, SystemTime)> = Vec::new();
-        self.collect_backups(&mut backups)?;
+        let backups: Vec<(PathBuf, SystemTime)> = self.collect_backups()?;
 
         let now = SystemTime::now();
         for (index, (path, modified)) in backups.iter().enumerate() {
@@ -222,6 +231,20 @@ impl Database {
                     eprintln!("Cannot delete backup {}: {}", path.display(), e);
                 }
             }
+        }
+
+        Ok(())
+    }
+    pub fn print_backups(&self) -> Result<(), String> {
+        let backups: Vec<(PathBuf, SystemTime)> = self.collect_backups()?;
+
+        for (index, (path, time)) in backups.iter().enumerate() {
+            let time: DateTime<Utc> = time.clone().into();
+            println!("{} | {} [{}]",
+                     index,
+                     path.display(),
+                     time.format("%F %H:%M:%S")
+            );
         }
 
         Ok(())
