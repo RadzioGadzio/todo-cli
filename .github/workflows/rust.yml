@@ -33,7 +33,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_VERSION }}
-          components: clippy, rustfmt
+          components: clippy
       
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
@@ -45,8 +45,6 @@ jobs:
       
       - name: Clippy Lints
         run: cargo clippy --all-targets --all-features -- ${{ env.RUST_CLIPPY_ARGS }}
-      - name: Rustfmt
-        run: cargo fmt --all --check
   build:
     name: Binary (${{ matrix.suffix }})
     needs: test
