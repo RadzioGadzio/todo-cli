@@ -1,6 +1,6 @@
 use crate::args::Action;
 use crate::database::{Item};
-use crate::database::item::print_pretty;
+use crate::database::item::{check_parent, print_pretty, check_ids, get_selected_ids};
 
 pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, String> {
     match action {
@@ -19,6 +19,10 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
               }
             }
 
+            if let Some(parent_id) = parent_id {
+                check_parent(items, parent_id.clone())?;
+            }
+
             items.push(Item::new(
                 max_id + 1,
                 title.to_string(),
@@ -28,7 +32,30 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             execute_action(items, &Action::LIST)?;
 
             return Ok(true);
-        }
+        },
+        Action::REMOVE { ids, recursive, all } => {
+            if *all {
+                items.clear();
+                execute_action(items, &Action::LIST)?;
+                return Ok(true);
+            }
+            let mut ids = ids.clone();
+            if ids.is_empty() {
+                ids = items.iter().filter(|item| item.done).map(|item| item.id()).collect::<Vec<u32>>();
+            }
+
+            if ids.is_empty() {
+                execute_action(items, &Action::LIST)?;
+                return Ok(false);
+            }
+            check_ids(items, &ids)?;
+            let targets: Vec<u32> = get_selected_ids(items, &ids, *recursive);
+
+            items.retain(|item| !targets.contains(&item.id()));
+            execute_action(items, &Action::LIST)?;
+
+            return Ok(true);
+        },
         Action::DONE { ids , recursive, inverted} => {
             if ids.is_empty() {
                 return Err("Empty IDs not allowed".to_string());

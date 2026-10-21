@@ -23,11 +23,14 @@ pub enum Action {
         parent_id: Option<u32>,
     },
     REMOVE {
-        #[arg(help = "Todo ids to remove")]
+        #[arg(help = "Todo ids to remove. If omitted removes all done todos")]
         ids: Vec<u32>,
 
-        #[arg(short = 'd', long, help = "Remove only done", default_value = "true")]
-        only_done: bool,
+        #[arg(short, long, help = "Remove all children", default_value = "false")]
+        recursive: bool,
+
+        #[arg(short, long, help = "Remove all", default_value = "false")]
+        all: bool,
 
     },
     DONE {
