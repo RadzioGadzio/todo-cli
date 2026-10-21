@@ -75,7 +75,7 @@ jobs:
         ASSET: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}
       run: |
         mkdir "$ASSET"
-        cp "target/release${BIN_NAME}${{ matrix.ext }}" "$ASSET/"
+        cp "target/release/${BIN_NAME}${{ matrix.ext }}" "$ASSET/"
         if [ "${{ matrix.archive }}" = "zip" ]; then
           7z a "$ASSET.zip" "$ASSET"
         else
