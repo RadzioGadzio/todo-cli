@@ -16,6 +16,7 @@ env:
   RUST_CLIPPY_ARGS: "-D warnings"
   RUST_VERSION: "1.99.0"
   BIN_NAME: "todo-cli"
+  VERSION: ${{ github.event.inputs.manual_tag || github.ref_name }}
 
 jobs:
   test:
@@ -44,6 +45,8 @@ jobs:
       
       - name: Clippy Lints
         run: cargo clippy --all-targets --all-features -- ${{ env.RUST_CLIPPY_ARGS }}
+      - name: Rustfmt
+        run: cargo fmt --all --check
   build:
     name: Binary (${{ matrix.suffix }})
     needs: test
@@ -51,12 +54,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  suffix: linux,   ext: "" }
-          - { os: windows-latest, suffix: windows, ext: ".exe" }
-          - { os: macos-latest,   suffix: macos,   ext: "" }
+          - { os: ubuntu-latest,  suffix: linux,   ext: "",     archive: tar.gz  }
+          - { os: windows-latest, suffix: windows, ext: ".exe", archive: zip  }
+          - { os: macos-latest,   suffix: macos,   ext: "",     archive: tar.gz  }
     runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
@@ -67,11 +70,47 @@ jobs:
     
     - name: Build Release Binary
       run: cargo build --release --locked
-    
+
+    - name: Package
+      shell: bash
+      env:
+        ASSET: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}
+      run: |
+        mkdir "$ASSET"
+        cp "target/release${BIN_NAME}${{ matrix.ext }}" "$ASSET/"
+        if [ "${{ matrix.archive }}" = "zip" ]; then
+          7z a "$ASSET.zip" "$ASSET"
+        else
+          tar czf "$ASSET.tar.gz" "$ASSET"
+        fi
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
-        name: ${{ env.BIN_NAME }}-${{ github.event.inputs.manual_tag || github.ref_name }}-${{ matrix.suffix }}
-        path: target/release/${{ env.BIN_NAME }}${{ matrix.ext }}
+        name: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}
+        path: ${{ env.BIN_NAME }}-${{ env.VERSION }}-${{ matrix.suffix }}.${{ matrix.archive }}
         if-no-files-found: 'error'
+        compression-level: 0
         retention-days: 7
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: ${{ env.BIN_NAME }}-*
+          merge-multiple: true
+
+      - name: Checksum
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true
