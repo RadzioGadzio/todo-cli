@@ -45,7 +45,12 @@ pub enum Action {
     },
     LIST,
     RESET,
-    BACKUP
+    BACKUP {
+        #[arg(short, long, help = "Index of backup to restore")]
+        index: Option<u32>,
+        #[arg(short, long, help = "Backup path to restore")]
+        path: Option<PathBuf>,
+    }
 }
 
 #[derive(Parser, Debug)]

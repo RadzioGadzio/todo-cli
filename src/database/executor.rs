@@ -71,8 +71,36 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             execute_action(items, &Action::LIST)?;
 
             return Ok(true);
+        },
+        Action::RESET => {
+            for item in items.iter_mut() {
+                item.done = false;
+            }
+            execute_action(items, &Action::LIST)?;
+            return Ok(true);
         }
-        _ => todo!("Not implemented yet")
+        Action::EDIT { id, title, description, parent_id} => {
+            let mut parent_id: Option<u32> = parent_id.clone();
+
+            if let Some(id) = parent_id {
+                check_parent(items, id.clone())?;
+                parent_id = Some(id.clone());
+            }
+
+            let item = match items.iter_mut().find(|item| &item.id() == id) {
+                Some(item) => item,
+                None => return Err(format!("Item with id '{id}' not found")),
+            };
+
+            if let Some(title) = title && !title.is_empty() { item.title = title.to_string(); }
+            if let Some(description) = description && !description.is_empty() { item.description = Some(description.to_string()); }
+            if let Some(parent_id) = parent_id { item.parent = Some(parent_id); }
+
+            execute_action(items, &Action::LIST)?;
+
+            return Ok(true);
+        }
+        _ => {}
     }
 
     Ok(false)

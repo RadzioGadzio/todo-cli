@@ -10,6 +10,8 @@ use crate::args::Args;
 pub struct Config {
     pub db_path: PathBuf,
     pub backups_dir: PathBuf,
+    pub max_backups: usize,
+    pub max_backup_age_days: u64,
 }
 
 impl Default for Config {
@@ -17,6 +19,8 @@ impl Default for Config {
         Config {
             db_path: Path::new("todos.csv").to_path_buf(),
             backups_dir: Path::new("backups").to_path_buf(),
+            max_backups: 10,
+            max_backup_age_days: 30
         }
     }
 }
