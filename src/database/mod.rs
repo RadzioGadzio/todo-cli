@@ -26,50 +26,50 @@ impl Database {
         }
     }
     pub fn run(&self) -> Result<(), String> {
-        let items_result = self.read(None);
-        if let Err(e) = items_result {
-            return Err(e);
-        }
-        let mut items = items_result?;
-
         if let Action::BACKUP { .. } = &self.args.action {
-            if self.backup_action(&self.args.action, &mut items)? {
-                // Restore backup
-                self.write(&items, None)?;
-            }
-            return Ok(());
+            return self.backup_action(&self.args.action);
         }
+        let mut items = self.read(None)?;
+
 
         if execute_action(&mut items, &self.args.action)? {
-            if let Err(e) = self.backup(None) {
-                return Err(e);
-            }
+            self.backup(None)?;
             self.write(&items, None)?;
         }
 
         Ok(())
     }
 
-    fn backup_action(&self, action: &Action, items: &mut Vec<Item>) -> Result<bool, String> {
+    fn backup_action(&self, action: &Action) -> Result<(), String> {
         match action {
-            Action::BACKUP { index, path } => {
-                if let Some(index) = index {
-                    // Restore backup from index
-                    todo!()
+            Action::BACKUP { index, path, name, create } => {
+                if *create {
+                    let name =  match name {
+                        Some(name) => name.as_str(),
+                        None => "manual"
+                    };
+                    self.backup(Some(&name))?;
+                    println!("Backup '{}' created", name);
+                    return Ok(());
                 }
-                else if let Some(path) = path {
+
+                let target: Option<PathBuf> = match (path, index) {
+                    (Some(p), _) => Some(p.clone()),
+                    (None, Some(i)) => Some(self.get_backup_path(*i)?),
+                    (None, None) => None
+                };
+
+                match target {
                     // Restore backup from path
-                    todo!()
-                }
-                // List backups
-                else {
-                    self.print_backups()?;
+                    Some(p) => self.restore(&p)?,
+                    // List backups
+                    None => self.print_backups()?
                 }
             }
             _ => {}
         }
 
-        Ok(false)
+        Ok(())
     }
 
     fn read(&self, path: Option<&PathBuf>) -> Result<Vec<Item>, String> {
@@ -148,7 +148,8 @@ impl Database {
         
         Ok(())
     }
-    fn backup(&self, name: Option<&str>) -> Result<(), String> {
+
+    pub fn backup(&self, name: Option<&str>) -> Result<(), String> {
         let now: DateTime<Utc> = SystemTime::now().into();
         let backup_dir = &self.config.backups_dir;
 
@@ -156,21 +157,42 @@ impl Database {
             fs::create_dir_all(backup_dir).map_err(|err| err.to_string())?;
         }
 
-        let items = self.read(None)?;
         let mut file_name = now.format("%F_%H-%M-%S").to_string();
         if let Some(name) = name {
             file_name.push_str("_");
             file_name.push_str(name);
         }
         let path = backup_dir.join(PathBuf::from(format!("{}.csv", file_name)));
-
-        self.write(&items, Some(&path))?;
-
+        if let Err(e) = fs::copy(&self.config.db_path, &path) {
+            return Err(format!("Cannot backup database: {}", e));
+        }
         self.prune_backups()?;
 
         Ok(())
     }
+    pub fn get_backup_path(&self, index: u32) -> Result<PathBuf, String> {
+        let backups = self.collect_backups()?;
+        match backups.get(index as usize) {
+            Some((path, _)) => Ok(path.clone()),
+            None => Err(format!(
+                "Backup index {} out of range, {} backup(s) found",
+                index,
+                backups.len()
+            )),
+        }
+    }
 
+    pub fn restore(&self, path: &PathBuf) -> Result<(), String> {
+        if !path.exists() {
+            return Err(format!("Path does not exist: {}", path.display()));
+        }
+
+        if let Err(e) = fs::copy(path, &self.config.db_path) {
+            return Err(format!("Cannot restore database: {}", e));
+        }
+        println!("Backup successfully restored: {}", path.display());
+        Ok(())
+    }
     /** Collect (path, modified time) for every backup file. */
     pub fn collect_backups(&self) -> Result<Vec<(PathBuf, SystemTime)>, String> {
         let mut backups: Vec<(PathBuf, SystemTime)> = Vec::new();

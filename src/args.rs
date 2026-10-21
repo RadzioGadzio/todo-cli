@@ -50,6 +50,12 @@ pub enum Action {
         index: Option<u32>,
         #[arg(short, long, help = "Backup path to restore")]
         path: Option<PathBuf>,
+        
+        #[arg(short, long, help = "Create new backup")]
+        create: bool,
+        
+        #[arg(short, long, help = "New backup name")]
+        name: Option<String>,
     }
 }
 
