@@ -73,7 +73,7 @@ jobs:
       shell: bash
       env:
         ASSET: ${{ env.BIN_NAME}}-${{ matrix.suffix }}
-        BIN: ${{ env.BIN_NAME }}${{ matrix.env }}
+        BIN: ${{ env.BIN_NAME }}${{ matrix.ext }}
       run: |
         if [ "${{ matrix.archive }}" = "zip" ]; then
           FILE="$ASSET.zip"
@@ -93,6 +93,7 @@ jobs:
   notes:
     name: Release notes
     if: startsWith(github.ref, 'refs/tags/')
+    needs: [test, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
