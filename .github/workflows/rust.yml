@@ -52,9 +52,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  suffix: linux,   ext: ""  }
-          - { os: windows-latest, suffix: windows, ext: ".exe" }
-          - { os: macos-latest,   suffix: macos,   ext: "" }
+          - { os: ubuntu-latest,  suffix: linux,   ext: "",     archive: "tar.gz"}
+          - { os: windows-latest, suffix: windows, ext: ".exe", archive: "zip"}
+          - { os: macos-latest,   suffix: macos,   ext: "",     archive: "tar.gz"}
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v7
@@ -68,26 +68,88 @@ jobs:
     
     - name: Build Release Binary
       run: cargo build --release --locked
-
-    - name: Name Binary
-      id: bin
+    - name: Package Binary
+      id: package
       shell: bash
+      env:
+        ASSET: ${{ env.BIN_NAME}}-${{ matrix.suffix }}
+        BIN: ${{ env.BIN_NAME }}${{ matrix.env }}
       run: |
-        OUT="${BIN_NAME}-${{ matrix.suffix }}${{ matrix.ext }}"
-        cp "target/release/${BIN_NAME}${{ matrix.ext }}" "$OUT"
-        echo "file=$OUT" >> "$GITHUB_OUTPUT"
-      
-
+        if [ "${{ matrix.archive }}" = "zip" ]; then
+          FILE="$ASSET.zip"
+          (cd target/release && 7z a "../../$FILE" "$BIN")
+        else
+          FILE="$ASSET.tar.gz"
+          tar czf "$FILE" -C target/release "$BIN"
+        fi
+        echo "archive=$FILE" >> "$GITHUB_OUTPUT"
     - name: Upload Artifact
       uses: actions/upload-artifact@v7
       with:
-        path: ${{ steps.bin.outputs.file }}
+        path: ${{ steps.package.outputs.archive }}
         if-no-files-found: 'error'
         archive: false
         retention-days: 7
+  notes:
+    name: Release notes
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate notes
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: |
+          set -euo pipefail
+          
+          PREV=$(git describe --tags --abbrev=0 --match 'v*.*.*' "${VERSION}^" 2>/dev/null || true)
+          if [ -n "$PREV" ]; then RANGE="${PREV}..${VERSION}"; else RANGE="$VERSION"; fi
+          
+          git log --no-merges --pretty=format:'- %s (%h)' "$RANGE" | head -n 200 > commits.md
+          
+          if [ ! -s commits.md ]; then
+            echo "No changes recorded." > RELEASE_NOTES.md
+            exit 0
+          fi
+          
+          {
+            echo "Write release notes in Markdown for version ${VERSION} of a command-line todo app, based only on the commit list below."
+            echo "Group changes under these headings when applicable: Features, Fixes, Other. Skip empty groups."
+            echo "Use short bullet points. No introduction, no closing remarks. Do not invent changes."
+            echo
+            echo "Commits:"
+            cat commits.md
+          } > prompt.txt
+          
+          jq -n --rawfile prompt prompt.txt '{contents:[{parts:[{text:$prompt}]}]}' > request.json
+          
+          if curl -sS --fail-with-body --retry 3 --retry-all-errors \
+               "https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent" \
+               -H "x-goog-api-key: ${GEMINI_API_KEY}" \
+               -H "Content-Type: application/json" \
+               -d @request.json -o response.json \
+             && jq -er '[.candidates[0].content.parts[]?.text] | join("")' response.json > generated.md \
+             && [ -s generated.md ]; then
+            cp generated.md RELEASE_NOTES.md
+          else
+            echo "::warning::Gemini notes failed, using the plain commit list"
+            { echo "## Changes"; echo; cat commits.md; } > RELEASE_NOTES.md
+          fi
+
+      - name: Upload notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: RELEASE_NOTES.md
+          if-no-files-found: error
+          retention-days: 7
   release:
     name: Release
-    needs: build
+    needs: [build, notes]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
@@ -99,6 +161,11 @@ jobs:
           path: dist
           pattern: ${{ env.BIN_NAME }}-*
           merge-multiple: true
+      - name: Download notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: notes
 
       - name: Checksum
         working-directory: dist
@@ -107,4 +174,5 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: notes/RELEASE_NOTES.md
+          draft: true
