@@ -87,7 +87,7 @@ pub fn check_id(items: &[Item], item_id: u32) -> Result<(), String> {
 
 
 pub fn check_ids(items: &[Item], ids: &[u32]) -> Result<(), String> {
-    let found = ids.iter().all(|id| *(&items.iter().any(|item| item.id() == *id)));
+    let found = ids.iter().all(|id| items.iter().any(|item| item.id() == *id));
     if !found {
         return Err(
             format!(

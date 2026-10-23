@@ -2,12 +2,14 @@ use std::fs;
 use std::path::PathBuf;
 use crate::database::Item;
 
+#[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub enum SetupItems {
     RecursiveDepth1,
     RecursiveDepth2,
     Flat
 }
+#[allow(dead_code)]
 pub fn setup_items(setup: SetupItems) -> Vec<Item> {
     let t = |id: u32| format!("title{id}");
     match setup {
@@ -33,6 +35,7 @@ pub fn setup_items(setup: SetupItems) -> Vec<Item> {
         ]
     }
 }
+#[allow(dead_code)]
 pub fn setup_ids(setup: SetupItems) -> Vec<u32> {
     setup_items(setup).iter().map(|item|item.id()).collect::<Vec<u32>>()
 }
@@ -40,6 +43,7 @@ pub fn setup_ids(setup: SetupItems) -> Vec<u32> {
 pub struct TempDir(PathBuf);
 
 impl TempDir {
+    #[allow(dead_code)]
     pub fn new(name: &str) -> Self {
         let path = std::env::temp_dir()
             .join(format!("todo_cli_{}_{}", name, std::process::id()));
@@ -47,6 +51,7 @@ impl TempDir {
         fs::create_dir_all(&path).unwrap();
         TempDir(path)
     }
+    #[allow(dead_code)]
     pub fn path(&self) -> &PathBuf {
         &self.0
     }
