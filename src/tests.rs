@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::PathBuf;
 use crate::database::Item;
 
 #[derive(Copy, Clone)]
@@ -33,4 +35,25 @@ pub fn setup_items(setup: SetupItems) -> Vec<Item> {
 }
 pub fn setup_ids(setup: SetupItems) -> Vec<u32> {
     setup_items(setup).iter().map(|item|item.id()).collect::<Vec<u32>>()
+}
+
+pub struct TempDir(PathBuf);
+
+impl TempDir {
+    pub fn new(name: &str) -> Self {
+        let path = std::env::temp_dir()
+            .join(format!("todo_cli_{}_{}", name, std::process::id()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+        TempDir(path)
+    }
+    pub fn path(&self) -> &PathBuf {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
