@@ -75,11 +75,11 @@ pub fn print_pretty(items: &[Item]) {
     }
 }
 
-pub fn check_parent(items: &[Item], parent_id: u32) -> Result<(), String> {
-    let valid_parent = items.iter().find(|item| parent_id == item.id()).is_some();
+pub fn check_id(items: &[Item], item_id: u32) -> Result<(), String> {
+    let valid = items.iter().find(|item| item_id == item.id()).is_some();
 
-    if !valid_parent {
-        return Err(format!("Invalid parent ID: {}", parent_id));
+    if !valid {
+        return Err(format!("Invalid item ID: {}", item_id));
     }
 
     Ok(())
@@ -87,7 +87,7 @@ pub fn check_parent(items: &[Item], parent_id: u32) -> Result<(), String> {
 
 
 pub fn check_ids(items: &[Item], ids: &[u32]) -> Result<(), String> {
-    let found = items.iter().any(|item| ids.contains(&item.id()));
+    let found = ids.iter().all(|id| *(&items.iter().any(|item| item.id() == *id)));
     if !found {
         return Err(
             format!(
@@ -107,7 +107,7 @@ pub fn get_selected_ids(items: &[Item], ids: &[u32], recursive: bool) -> Vec<u32
         children.clear();
         item.collect_children(items, &mut children);
 
-        if ids.contains(&item.id()) {
+        if ids.contains(&item.id()) && !targets.contains(&item.id()) {
             targets.push(item.id());
         }
         if !!recursive && !children.is_empty() {
@@ -117,4 +117,65 @@ pub fn get_selected_ids(items: &[Item], ids: &[u32], recursive: bool) -> Vec<u32
     }
 
     targets
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests;
+    use crate::tests::SetupItems;
+    use super::*;
+
+    #[test]
+    fn _item_collect_children() {
+        let items = tests::setup_items(SetupItems::RecursiveDepth2);
+        let root_item = &items[0];
+
+        let mut children: Vec<(u32, usize)> = vec![];
+
+        root_item.collect_children(&items, &mut children);
+        assert!(!children.is_empty(), "Expected items to be collected. Root: {:?}, children: {:?}", root_item, children);
+        assert!(children.contains(&(0, 0)), "Don't contain root element. Root: {:?}, children: {:?}", root_item, children);
+        assert!(children.contains(&(1, 1)), "Don't contain item with ID=1 at depth=1. Root: {:?}, children: {:?}", root_item, children);
+        assert!(children.contains(&(3, 1)), "Don't contain item with ID=3 at depth=1. Root: {:?}, children: {:?}", root_item, children);
+        assert!(children.contains(&(2, 2)), "Don't contain item with ID=2 at depth=2. Root: {:?}, children: {:?}", root_item, children);
+    }
+    #[test]
+    fn _check_id() {
+        let items = tests::setup_items(SetupItems::Flat);
+
+        assert!(check_id(&items, 0).is_ok(), "Item not found");
+        assert!(check_id(&items, 1000).is_err(), "Item found while it shouldn't");
+
+    }
+    #[test]
+    fn _check_ids() {
+        let items = tests::setup_items(SetupItems::Flat);
+        let mut ids = vec![1, 2];
+
+        assert!(check_ids(&items, &ids).is_ok(), "Doesn't return Ok. Item ids: {:?}, Ids: {:?}", tests::setup_ids(SetupItems::Flat), ids);
+
+        ids.push(1000);
+
+        assert!(check_ids(&items, &ids).is_err(), "Doesn't return an error. Items ids: {:?}, Ids: {:?}", tests::setup_ids(SetupItems::Flat), ids);
+
+
+    }
+    #[test]
+    fn _get_selected_ids() {
+        let items = tests::setup_items(SetupItems::RecursiveDepth1);
+        let mut ids = vec![];
+
+        let selected_ids = get_selected_ids(&items, &ids, false);
+
+        assert!(selected_ids.is_empty(), "Returned something while shouldn't. Ids: {:?}, selected ids: {:?}", ids, selected_ids);
+
+        ids.push(0);
+        let selected_ids = get_selected_ids(&items, &ids, false);
+        assert!(selected_ids.iter().all(|id| ids.contains(id)), "Doesn't return valid ids: {:?}, returned {:?}", ids, selected_ids);
+
+        let selected_ids = get_selected_ids(&items, &ids, true);
+
+        ids.extend([1, 2]);
+        assert!(selected_ids.iter().all(|id| ids.contains(id)), "Doesn't return valid recursive ids: {:?}, returned {:?}", ids, selected_ids);
+    }
 }

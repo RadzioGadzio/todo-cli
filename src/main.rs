@@ -3,6 +3,7 @@ extern crate core;
 mod args;
 mod config;
 mod database;
+mod tests;
 
 use crate::args::{parse_args};
 use crate::database::Database;
@@ -12,6 +13,6 @@ fn main() -> Result<(), String> {
     let args = parse_args();
     let config = Config::from_args(&args).unwrap();
     let database = Database::new(args, config);
-    
+
     database.run()
 }

@@ -1,6 +1,6 @@
 use crate::args::Action;
 use crate::database::{Item};
-use crate::database::item::{check_parent, print_pretty, check_ids, get_selected_ids};
+use crate::database::item::{check_id, print_pretty, check_ids, get_selected_ids};
 
 pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, String> {
     match action {
@@ -20,7 +20,7 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             }
 
             if let Some(parent_id) = parent_id {
-                check_parent(items, *parent_id)?;
+                check_id(items, *parent_id)?;
             }
 
             items.push(Item::new(
@@ -35,22 +35,24 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
         },
         Action::Remove { ids, recursive, all } => {
             if *all {
+                let items_count = items.len();
                 items.clear();
-                execute_action(items, &Action::List)?;
+                println!("Removed {} items", items_count);
                 return Ok(true);
             }
             let mut ids = ids.clone();
             if ids.is_empty() {
+                // Retrieve todos marked as done
                 ids = items.iter().filter(|item| item.done).map(|item| item.id()).collect::<Vec<u32>>();
             }
 
             if ids.is_empty() {
-                execute_action(items, &Action::List)?;
-                return Ok(false);
+                return Err("No items found".to_string());
             }
             check_ids(items, &ids)?;
             let targets: Vec<u32> = get_selected_ids(items, &ids, *recursive);
 
+            // Remove items also defined in `targets`
             items.retain(|item| !targets.contains(&item.id()));
             execute_action(items, &Action::List)?;
 
@@ -63,8 +65,9 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
             check_ids(items, ids)?;
             let targets: Vec<u32> = get_selected_ids(items, ids, *recursive);
 
+            // Update each `done` variable if its id is specified
             for item in items.iter_mut() {
-                if !targets.contains(&item.id()) { continue;}
+                if !targets.contains(&item.id()) { continue; }
                 item.done = !inverted;
             }
 
@@ -82,11 +85,13 @@ pub fn execute_action(items: &mut Vec<Item>, action: &Action) -> Result<bool, St
         Action::Edit { id, title, description, parent_id} => {
             let mut parent_id: Option<u32> = *parent_id;
 
+            // Check if `parent_id` is valid
             if let Some(id) = parent_id {
-                check_parent(items, id)?;
+                check_id(items, id)?;
                 parent_id = Some(id);
             }
 
+            // Item to edit
             let item = match items.iter_mut().find(|item| &item.id() == id) {
                 Some(item) => item,
                 None => return Err(format!("Item with id '{id}' not found")),
